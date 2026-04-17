@@ -931,7 +931,6 @@ def unify_kv_cache_spec_page_size(
         The updated KVCacheSpec with the same page_size_bytes.
     """
     import math
-    from functools import reduce
 
     page_sizes = {layer.page_size_bytes for layer in kv_cache_spec.values()}
     if len(page_sizes) <= 1:
@@ -949,10 +948,8 @@ def unify_kv_cache_spec_page_size(
     else:
         # Hybrid model: page sizes not naturally divisible.
         # Pad max_page_size UP to nearest multiple of LCM of smaller sizes.
-        def _lcm(a, b):
-            return a * b // math.gcd(a, b)
-        smaller_lcm = reduce(_lcm, smaller_sizes)
-        target_page_size = math.ceil(max_page_size / smaller_lcm) * smaller_lcm
+        smaller_lcm = math.lcm(*smaller_sizes)
+        target_page_size = ((max_page_size + smaller_lcm - 1) // smaller_lcm) * smaller_lcm
         logger.info(
             "Page size unification: padding max %d -> %d (LCM of smaller = %d, "
             "overhead %.3f%%)",
