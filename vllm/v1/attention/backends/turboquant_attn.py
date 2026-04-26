@@ -470,6 +470,13 @@ class TurboQuantAttentionImpl(AttentionImpl["TurboQuantMetadata"]):
                 _synth_block_table = attn_metadata.block_table[:B].repeat_interleave(
                     K_PLUS_1, dim=0,
                 )
+                # Reuse cached decode buffers from the layer to avoid
+                # per-call torch.empty allocations — these would break
+                # CUDA graph replay (the very thing this PR restores).
+                # Per gemini-code-assist review on this PR.
+                _mid_o_buf = getattr(layer, "_tq_mid_o_buf", None)
+                _output_buf = getattr(layer, "_tq_output_buf", None)
+                _lse_buf = getattr(layer, "_tq_lse_buf", None)
                 attn_out = triton_turboquant_decode_attention(
                     query=_q_flat,
                     kv_cache=kv_cache,
@@ -484,6 +491,11 @@ class TurboQuantAttentionImpl(AttentionImpl["TurboQuantMetadata"]):
                     key_fp8=self.tq_config.key_fp8,
                     norm_correction=self.tq_config.norm_correction,
                     PiT=PiT,
+                    mid_o_buf=_mid_o_buf,
+                    output_buf=_output_buf,
+                    lse_buf=_lse_buf,
+                    buf_holder=layer,
+                    max_num_kv_splits=self.max_num_kv_splits,
                 )
                 return attn_out
 
